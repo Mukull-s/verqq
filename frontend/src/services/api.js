@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 // Helper function to determine auth type
 const getAuthType = (token) => {
