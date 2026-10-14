@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const { processPDF } = require('../services/pdfService');
 const { generateInterviewQuestion } = require('../services/geminiService');
-const { textToSpeech } = require('../services/textToSpeechService');
 const { validateConfig } = require('../config/config');
 
 // Validate environment variables
@@ -126,14 +125,9 @@ async function extractAndProcessPDF() {
       console.log(question);
       console.log('----------------------------------------');
 
-      // Convert question to speech using ElevenLabs
-      console.log('\nConverting question to speech...');
-      const audioOutputPath = path.join(outputDir, `${originalFileName}_${timestamp}.mp3`);
-      await textToSpeech(question, audioOutputPath, 'en-us');
-      
-      console.log(`\nAudio has been saved to: ${audioOutputPath}`);
+      console.log('\nNote: Audio rendering is handled client-side by the app (browser speech synthesis).');
     } catch (geminiError) {
-      console.error('\nError with Gemini API:', geminiError.message);
+      console.error('\nError with LLM API:', geminiError.message);
       console.log('\nGenerating fallback question instead...');
       
       const fallbackQuestion = generateFallbackQuestion(extractedText);
@@ -142,14 +136,6 @@ async function extractAndProcessPDF() {
       console.log('----------------------------------------');
       console.log(fallbackQuestion);
       console.log('----------------------------------------');
-      
-      // Convert fallback question to speech
-      console.log('\nConverting fallback question to speech...');
-      const audioOutputPath = path.join(outputDir, `${originalFileName}_${timestamp}_fallback.mp3`);
-      await textToSpeech(fallbackQuestion, audioOutputPath);
-      
-      console.log(`\nAudio has been saved to: ${audioOutputPath}`);
-      console.log('\nNote: This is a fallback question generated without using AI. For better questions, please fix the Gemini API issue.');
     }
     
   } catch (error) {

@@ -12,10 +12,12 @@ async function speechToText(audioBuffer, options = {}) {
   const deepgram = new Deepgram(config.deepgram.apiKey);
 
   try {
-    // Create the source object
+    // Frontend sends webm/opus; do not hardcode mp3. Pass through when provided.
+    const mimetype = options.mimetype || 'audio/webm';
+    const { mimetype: _omit, ...restOptions } = options;
     const source = {
       buffer: audioBuffer,
-      mimetype: 'audio/mp3'
+      mimetype
     };
 
     // Create the transcription options
@@ -47,8 +49,8 @@ async function speechToText(audioBuffer, options = {}) {
       sample_rate: 16000,
       channels: 1,
       
-      // Additional options
-      ...options
+      // Additional options (mimetype already stripped above)
+      ...restOptions
     };
 
     // Call the transcription API
