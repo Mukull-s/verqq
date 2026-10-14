@@ -2,25 +2,28 @@ const User = require('../models/User');
 
 exports.createOrUpdateUser = async (req, res) => {
     try {
-        const { uid, email, displayName, photoURL } = req.body;
+        // Bind strictly to the authenticated user. Never trust uid/email from the
+        // request body: doing so allowed account confusion / mass-assignment (VRQ-003).
+        const { displayName, photoURL } = req.body;
 
-        // Try to find existing user
-        let user = await User.findOne({ uid });
+        const updates = {};
+        if (typeof displayName === 'string' && displayName.trim()) {
+            updates.displayName = displayName.trim();
+        }
+        if (typeof photoURL === 'string') {
+            updates.photoURL = photoURL;
+        }
 
-        if (user) {
-            // Update existing user
-            user = await User.findOneAndUpdate(
-                { uid },
-                { email, displayName, photoURL },
-                { new: true }
-            );
-        } else {
-            // Create new user
-            user = await User.create({
-                uid,
-                email,
-                displayName,
-                photoURL
+        const user = await User.findByIdAndUpdate(
+            req.user._id,
+            updates,
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!user) {
+            return res.status(404).json({
+                status: 'error',
+                message: 'User not found'
             });
         }
 
