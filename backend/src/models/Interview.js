@@ -36,6 +36,13 @@ const interviewSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Planned duration in minutes (optional, UI-only before fix)
+  duration: {
+    type: Number,
+    default: 30,
+    min: 15,
+    max: 60
+  },
   // Extracted resume text
   resumeText: {
     type: String,
@@ -58,7 +65,7 @@ const interviewSchema = new mongoose.Schema({
   // Status of the interview
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'completed', 'cancelled'],
+    enum: ['pending', 'in_progress', 'completed', 'cancelled', 'failed'],
     default: 'pending'
   },
   // Questions and answers
