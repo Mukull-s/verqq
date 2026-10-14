@@ -10,7 +10,6 @@ export default function InterviewSession() {
   const navigate = useNavigate();
   const { showError, showSuccess, showInfo } = useNotification();
 
-  // State definitions
   const [interview, setInterview] = useState(null);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [pendingNextQuestion, setPendingNextQuestion] = useState(null);
@@ -18,19 +17,18 @@ export default function InterviewSession() {
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Recording states
+
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const [audioURL, setAudioURL] = useState(null);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef(null);
   const [audioStream, setAudioStream] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [micError, setMicError] = useState(null);
 
-  // AI Work Progress States
-  const [aiState, setAiState] = useState(''); // 'listening', 'transcribing', 'evaluating_accuracy', 'evaluating_concepts', 'preparing_followup', 'finalizing_report', ''
-  
-  // Dialog / Modal state
+  const [aiState, setAiState] = useState('');
+
   const [showExitModal, setShowExitModal] = useState(false);
   const [showEvaluation, setShowEvaluation] = useState(false);
   const [currentEvaluation, setCurrentEvaluation] = useState(null);
@@ -38,31 +36,37 @@ export default function InterviewSession() {
   const [overallEvaluation, setOverallEvaluation] = useState(null);
   const [isComplete, setIsComplete] = useState(false);
 
-  // Client-side Web Speech TTS
   const speak = (text) => {
-    if (isMuted) return;
+    if (isMuted || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    const premiumVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
+    const premiumVoice = voices.find((v) => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
     if (premiumVoice) utterance.voice = premiumVoice;
     window.speechSynthesis.speak(utterance);
   };
 
   useEffect(() => {
-    if (currentQuestion && !isLoading) {
-      speak(currentQuestion);
-    }
+    if (currentQuestion && !isLoading) speak(currentQuestion);
   }, [currentQuestion, isLoading]);
 
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
       if (timerRef.current) clearInterval(timerRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder) {
+        try {
+          if (recorder.state !== 'inactive') recorder.stop();
+          recorder.stream?.getTracks?.().forEach((track) => track.stop());
+        } catch (e) {
+          console.error('Error cleaning up recorder on unmount:', e);
+        }
+        mediaRecorderRef.current = null;
+      }
     };
   }, []);
 
-  // Fetch / Sync interview state
   const fetchSessionData = async (isInitial = false) => {
     try {
       if (isInitial) setIsLoading(true);
@@ -73,16 +77,11 @@ export default function InterviewSession() {
         setIsComplete(true);
         setOverallEvaluation(data.overallEvaluation);
       } else {
-        // Find current question context
         const Qs = data.questions || [];
         if (Qs.length > 0 && !currentQuestion) {
-          // If in progress, show the last answered question's evaluation or prompt next
           const lastQA = Qs[Qs.length - 1];
-          if (lastQA && !showEvaluation) {
-            setCurrentQuestion(lastQA.question);
-          }
+          if (lastQA && !showEvaluation) setCurrentQuestion(lastQA.question);
         } else if (Qs.length === 0 && !currentQuestion) {
-          // Fallback to first question stored in localStorage
           const saved = localStorage.getItem('currentInterview');
           if (saved) {
             const { question } = JSON.parse(saved);
@@ -100,69 +99,88 @@ export default function InterviewSession() {
   };
 
   useEffect(() => {
-    if (sessionId) {
-      fetchSessionData(true);
-    }
+    if (sessionId) fetchSessionData(true);
   }, [sessionId]);
 
+  const getSupportedMimeType = () => {
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/mpeg'];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+  };
+
+  const describeMicError = (err) => {
+    const name = err?.name || '';
+    switch (name) {
+      case 'NotAllowedError':
+      case 'SecurityError':
+        return 'Microphone access was blocked. Allow microphone permission for this site in your browser settings, then try again.';
+      case 'NotFoundError':
+      case 'DevicesNotFoundError':
+        return 'No microphone was found. Connect a microphone and try again.';
+      case 'NotReadableError':
+      case 'TrackStartError':
+        return 'Your microphone is in use by another app. Close other apps using it and try again.';
+      case 'OverconstrainedError':
+      case 'ConstraintNotSatisfiedError':
+        return 'Your microphone does not support the requested audio settings. Try a different device.';
+      case 'AbortError':
+        return 'Microphone start was interrupted. Please try again.';
+      default:
+        return 'Could not start recording. Check your microphone and browser permissions and try again.';
+    }
+  };
+
   const startRecording = async () => {
+    if (isRecording || isSubmitting) return;
     try {
       setAudioURL(null);
       setRecordingTime(0);
       audioChunksRef.current = [];
+      setMicError(null);
       setAiState('listening');
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
-      
       setAudioStream(stream);
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 128000
-      });
+
+      const mimeType = getSupportedMimeType();
+      let mediaRecorder;
+      try {
+        mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 128000 }) : new MediaRecorder(stream);
+      } catch {
+        mediaRecorder = new MediaRecorder(stream);
+      }
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
-
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { 
-          type: 'audio/webm;codecs=opus'
-        });
+        const actualType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualType });
         const url = URL.createObjectURL(audioBlob);
         setAudioURL(url);
-        
-        // Auto-submit response to trigger AI processing states
         await submitResponse(audioBlob);
       };
 
       mediaRecorder.start(1000);
       setIsRecording(true);
-
-      timerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setRecordingTime((prev) => prev + 1), 1000);
     } catch (err) {
       console.error('Recording error:', err);
-      showError('Mic permissions are required for the voice session');
+      const message = describeMicError(err);
+      setMicError(message);
+      showError(message);
       setAiState('');
+      try { mediaRecorderRef.current?.stream?.getTracks?.().forEach((t) => t.stop()); } catch { /* noop */ }
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -173,10 +191,10 @@ export default function InterviewSession() {
   };
 
   const submitResponse = async (audioBlob) => {
+    if (isSubmitting) return;
     try {
+      setIsSubmitting(true);
       setAiState('transcribing');
-      
-      // Simulate progressive AI state updates during evaluations
       const timer1 = setTimeout(() => setAiState('evaluating_accuracy'), 1800);
       const timer2 = setTimeout(() => setAiState('evaluating_concepts'), 3600);
 
@@ -185,9 +203,7 @@ export default function InterviewSession() {
       formData.append('currentQuestion', currentQuestion);
 
       const { data } = await api.submitAnswer(sessionId, formData);
-      
-      clearTimeout(timer1);
-      clearTimeout(timer2);
+      clearTimeout(timer1); clearTimeout(timer2);
 
       setCurrentEvaluation(data.evaluation);
       setShowEvaluation(true);
@@ -200,17 +216,15 @@ export default function InterviewSession() {
         showSuccess('Interview evaluation report is ready!');
       } else {
         setAiState('');
-        if (data.nextQuestion) {
-          setPendingNextQuestion(data.nextQuestion);
-        }
+        if (data.nextQuestion) setPendingNextQuestion(data.nextQuestion);
       }
-
-      // Sync latest history from DB
       await fetchSessionData();
     } catch (err) {
       console.error('Answer submission error:', err);
       showError(err.message || 'Failed to submit response');
       setAiState('');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -218,9 +232,7 @@ export default function InterviewSession() {
     try {
       setIsGeneratingQuestion(true);
       setAiState('preparing_followup');
-
       const { data } = await api.generateFollowUpQuestion(sessionId);
-      
       if (data.nextQuestion) {
         setCurrentQuestion(data.nextQuestion);
         setShowEvaluation(false);
@@ -247,78 +259,71 @@ export default function InterviewSession() {
     }
   };
 
-  // Exit workflows
   const handleExitDecision = (action) => {
     setShowExitModal(false);
     if (action === 'save') {
       showSuccess('Session state auto-saved.');
-      navigate('/interview');
+      navigate('/my-interviews');
     } else if (action === 'discard') {
       showInfo('Session discarded.');
-      navigate('/interview');
+      navigate('/my-interviews');
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen pt-32 px-4 sm:px-8 flex flex-col items-center justify-center bg-[#09090B] font-chakra text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-2 border-t-purple-500 border-b-zinc-800"></div>
-        <p className="mt-4 text-xs font-semibold text-zinc-500 uppercase tracking-widest">Resuming Session...</p>
+      <div className="wrap" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div className="spin" style={{ width: 40, height: 40, borderRadius: 999, border: '3px solid var(--line)', borderTopColor: 'var(--accent)' }} />
+        <p className="kicker">Resuming session…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen pt-32 px-4 bg-[#09090B] font-chakra text-white">
-        <div className="max-w-md mx-auto rounded-2xl border border-red-500/20 bg-red-950/20 p-6 text-center space-y-4">
-          <p className="text-red-300 font-semibold">{error}</p>
-          <button onClick={() => navigate('/my-interviews')} className="bg-white text-black font-bold py-2.5 px-6 rounded-full text-xs cursor-pointer">
-            Return to Dashboard
-          </button>
+      <div className="wrap" style={{ paddingTop: 60 }}>
+        <div className="card card--lg card--pad" style={{ maxWidth: 440, margin: '0 auto', textAlign: 'center' }}>
+          <p style={{ color: 'var(--rose)', fontWeight: 600 }}>{error}</p>
+          <button className="btn btn--ink" style={{ marginTop: 18 }} onClick={() => navigate('/my-interviews')}>Return to dashboard</button>
         </div>
       </div>
     );
   }
 
-  const roadmap = interview?.roadmap || ['Introduction', 'Technical Skills', 'Problem Solving', 'Behavioral', 'Wrapping Up'];
+  const roadmap = interview?.roadmap?.length ? interview.roadmap : ['Introduction', 'Technical Skills', 'Problem Solving', 'Behavioral', 'Wrapping Up'];
   const activeRoadmapIndex = Math.min(interview?.questions?.length || 0, roadmap.length - 1);
+  const cycleCount = interview?.questions?.length || 0;
+
+  const metrics = [
+    { label: 'Technical depth', score: overallEvaluation?.technicalProficiency?.score, desc: overallEvaluation?.technicalProficiency?.explanation },
+    { label: 'Communication clarity', score: overallEvaluation?.communicationSkills?.score, desc: overallEvaluation?.communicationSkills?.explanation },
+    { label: 'Problem solving', score: overallEvaluation?.problemSolvingAbility?.score, desc: overallEvaluation?.problemSolvingAbility?.explanation },
+    { label: 'Target company alignment', score: overallEvaluation?.companyFit?.score, desc: overallEvaluation?.companyFit?.explanation },
+    { label: 'Speaking confidence', score: overallEvaluation?.confidence?.score, desc: overallEvaluation?.confidence?.explanation },
+  ];
 
   return (
-    <div className="min-h-screen pt-28 px-4 sm:px-8 bg-[#09090B] pb-24 text-white font-chakra relative">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Dynamic Timeline Roadmap Header */}
-        {!isComplete && (
-          <div className="rounded-2xl border border-zinc-850 bg-[#0C0C0E]/40 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">Interview Roadmap</h2>
-            <button
-              onClick={() => setShowExitModal(true)}
-              className="text-xs px-4 py-2 font-bold rounded-full border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 transition-colors cursor-pointer text-zinc-400 hover:text-white"
-            >
-              Exit Session
-            </button>
+    <div className="wrap" style={{ paddingTop: 34, paddingBottom: 72 }}>
+      {/* Roadmap */}
+      {!isComplete && (
+        <div className="card card--lg card--pad" style={{ padding: '20px 24px', marginBottom: 22 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <p className="kicker" style={{ margin: 0 }}>Interview roadmap</p>
+            <button className="btn btn--outline btn--sm" onClick={() => setShowExitModal(true)}>Exit session</button>
           </div>
-          
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5" style={{ gap: 10 }}>
             {roadmap.map((stage, idx) => {
               const isPassed = idx < activeRoadmapIndex;
               const isCurrent = idx === activeRoadmapIndex;
-              
               return (
-                <div key={idx} className="flex-1 w-full relative">
-                  <div className={`p-3 rounded-xl border flex items-center justify-between transition-all duration-300 ${
-                    isCurrent
-                      ? 'bg-purple-950/20 border-purple-500/40 text-purple-300'
-                      : isPassed
-                      ? 'bg-zinc-900/40 border-zinc-850 text-zinc-400'
-                      : 'bg-zinc-950/10 border-zinc-900 text-zinc-600'
-                  }`}>
-                    <span className="text-xs font-semibold truncate max-w-[150px]">{stage}</span>
-                    <span className="text-[10px] font-bold">
-                      {isPassed ? '✓' : isCurrent ? 'Active' : `0${idx + 1}`}
-                    </span>
+                <div key={idx} style={{
+                  padding: 13, borderRadius: 'var(--r-sm)',
+                  border: `1px solid ${isCurrent ? 'var(--accent)' : 'var(--line)'}`,
+                  background: isCurrent ? 'var(--accent-soft)' : isPassed ? 'var(--surface-2)' : '#fff',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5, fontWeight: 600, color: isCurrent ? 'var(--accent-2)' : 'var(--ink-2)' }}>
+                    <span className="truncate">{stage}</span>
+                    <span>{isPassed ? '✓' : isCurrent ? '●' : `0${idx + 1}`}</span>
                   </div>
                 </div>
               );
@@ -327,292 +332,204 @@ export default function InterviewSession() {
         </div>
       )}
 
-        {/* Main Content Pane */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Left panel - session actions */}
-          <div className="lg:col-span-2 space-y-6">
-            {!isComplete ? (
-              <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-6 sm:p-8 space-y-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Target Context: {interview?.targetCompany} Persona</span>
-                  <button 
-                    onClick={() => {
-                      setIsMuted(!isMuted);
-                      if (!isMuted) window.speechSynthesis.cancel();
-                    }}
-                    className="px-2.5 py-1 text-[10px] bg-zinc-900 hover:bg-zinc-800 text-zinc-400 rounded border border-zinc-850 cursor-pointer transition-colors font-medium"
-                    title={isMuted ? 'Unmute Audio Voice' : 'Mute Audio Voice'}
-                  >
-                    {isMuted ? '🔇 Muted' : '🔊 Speaking'}
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-xl sm:text-2xl font-bold text-white leading-relaxed">{currentQuestion}</h3>
-                </div>
-
-                {/* Mic recording box */}
-                <div className="flex flex-col items-center justify-center p-8 rounded-lg border border-zinc-900 bg-zinc-950/20 gap-6">
-                  {isRecording ? (
-                    <>
-                      <RecordingBlob isActive={isRecording} stream={audioStream} />
-                      <div className="text-center">
-                        <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1">Time elapsed</p>
-                        <p className="text-xl font-bold text-zinc-300">
-                          {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
-                        </p>
-                      </div>
-                      <button
-                        onClick={stopRecording}
-                        className="px-5 py-2 bg-red-650 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors cursor-pointer text-xs shadow-sm"
-                      >
-                        Stop Recording
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {/* AI work states loading instead of generic spinning */}
-                      {aiState ? (
-                        <div className="flex flex-col items-center gap-3 py-6">
-                          <div className="animate-spin rounded-full h-7 w-7 border-2 border-t-zinc-300 border-b-zinc-900"></div>
-                          <p className="text-[10px] text-zinc-450 font-semibold uppercase tracking-widest">
-                            {aiState === 'transcribing' && 'Transcribing response...'}
-                            {aiState === 'evaluating_accuracy' && 'Reviewing technical accuracy...'}
-                            {aiState === 'evaluating_concepts' && 'Comparing with expected concepts...'}
-                            {aiState === 'preparing_followup' && 'Preparing follow-up question...'}
-                            {aiState === 'finalizing_report' && 'Finalizing evaluation...'}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="text-center space-y-4">
-                          <button
-                            onClick={startRecording}
-                            className="w-12 h-12 rounded-full bg-white hover:bg-zinc-200 flex items-center justify-center text-black transition-all cursor-pointer shadow-sm active:scale-95"
-                          >
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
-                            </svg>
-                          </button>
-                          <p className="text-xs text-zinc-500">Click to start recording your response. Answer clearly.</p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.9fr) minmax(0,1fr)', gap: 22, alignItems: 'start' }} className="session-grid">
+        <div className="stack" style={{ gap: 20 }}>
+          {!isComplete ? (
+            <div className="card card--lg card--pad">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <span className="kicker" style={{ margin: 0 }}>{interview?.targetCompany} · {interview?.jobType || interview?.interviewType}</span>
+                <button
+                  onClick={() => { setIsMuted(!isMuted); if (!isMuted) window.speechSynthesis.cancel(); }}
+                  className="tag" style={{ cursor: 'pointer', border: '1px solid var(--line-2)' }}
+                  title={isMuted ? 'Unmute voice' : 'Mute voice'}
+                >
+                  {isMuted ? '🔇 Muted' : '🔊 Speaking'}
+                </button>
               </div>
-            ) : (
-              /* Final Comprehensive SaaS Report Panel */
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-6 sm:p-8 space-y-6 shadow-xl"
-              >
-                <div className="flex items-center justify-between border-b border-zinc-900/60 pb-5">
-                  <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Practice Report Card</h2>
-                    <p className="text-xs text-zinc-550 mt-1">Detailed performance review based on your 5 conversation cycles.</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Decision:</span>
-                    <span className="bg-zinc-900 border border-zinc-800 text-zinc-350 font-semibold px-2.5 py-1 rounded text-xs uppercase">
-                      {overallEvaluation?.hiringRecommendation?.decision || 'Practice Complete'}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Slider metrics */}
-                <div className="space-y-5">
-                  <h3 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">Performance Metrics</h3>
-                  
-                  {[
-                    { label: 'Technical Depth', score: overallEvaluation?.technicalProficiency?.score, desc: overallEvaluation?.technicalProficiency?.explanation },
-                    { label: 'Communication Clarity', score: overallEvaluation?.communicationSkills?.score, desc: overallEvaluation?.communicationSkills?.explanation },
-                    { label: 'Problem Solving Method', score: overallEvaluation?.problemSolvingAbility?.score, desc: overallEvaluation?.problemSolvingAbility?.explanation },
-                    { label: 'Target Company Alignment', score: overallEvaluation?.companyFit?.score, desc: overallEvaluation?.companyFit?.explanation },
-                    { label: 'Speaking Confidence Index', score: overallEvaluation?.confidence?.score, desc: overallEvaluation?.confidence?.explanation }
-                  ].map((metric) => (
-                    <div key={metric.label} className="space-y-1.5 p-4 rounded-lg bg-zinc-950 border border-zinc-900">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-zinc-300">{metric.label}</span>
-                        <span className="text-zinc-250 font-semibold">{metric.score || 0}/10</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-                        <div className="h-full bg-zinc-300 rounded-full" style={{ width: `${(metric.score || 0) * 10}%` }}></div>
-                      </div>
-                      <p className="text-[10px] text-zinc-550 pt-1 font-medium leading-relaxed">{metric.desc}</p>
+              <h2 style={{ fontSize: 'clamp(20px,2.2vw,28px)', lineHeight: 1.24 }}>{currentQuestion}</h2>
+
+              <div style={{ marginTop: 26, borderRadius: 'var(--r)', border: '1px solid var(--line)', background: 'var(--surface-2)', padding: 30, textAlign: 'center' }}>
+                {isRecording ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+                    <RecordingBlob isActive={isRecording} stream={audioStream} />
+                    <div>
+                      <p className="kicker" style={{ marginBottom: 4 }}>Elapsed</p>
+                      <p style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 600 }}>
+                        {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                      </p>
                     </div>
-                  ))}
-                </div>
-
-                {/* Highlights: Impressive vs Concerning Answers */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-zinc-900/60">
-                  <div className="p-4 rounded-lg border border-zinc-900 bg-zinc-950 space-y-2">
-                    <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">✓ Most Impressive Spot</h4>
-                    <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                      {overallEvaluation?.mostImpressiveAnswer || 'No specific impressive highlights.'}
+                    <button onClick={stopRecording} className="btn" style={{ background: 'var(--rose)', color: '#fff' }}>■ Stop recording</button>
+                  </div>
+                ) : aiState ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '18px 0' }} aria-live="polite">
+                    <div className="spin" style={{ width: 26, height: 26, borderRadius: 999, border: '3px solid var(--line-2)', borderTopColor: 'var(--accent)' }} />
+                    <p className="kicker">
+                      {aiState === 'transcribing' && 'Transcribing response…'}
+                      {aiState === 'evaluating_accuracy' && 'Reviewing technical accuracy…'}
+                      {aiState === 'evaluating_concepts' && 'Comparing with expected concepts…'}
+                      {aiState === 'preparing_followup' && 'Preparing follow-up question…'}
+                      {aiState === 'finalizing_report' && 'Finalizing evaluation…'}
                     </p>
                   </div>
-                  <div className="p-4 rounded-lg border border-zinc-900 bg-zinc-950 space-y-2">
-                    <h4 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">⚠ Key Improvement Spot</h4>
-                    <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                      {overallEvaluation?.mostConcerningAnswer || 'No critical bottlenecks identified.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* 5 Actions to improve */}
-                {overallEvaluation?.nextFiveImprovements && (
-                  <div className="pt-6 border-t border-zinc-900/60 space-y-3">
-                    <h3 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">Next 5 Things to Focus & Improve</h3>
-                    <ul className="space-y-2.5 text-xs text-zinc-300">
-                      {overallEvaluation.nextFiveImprovements.map((item, idx) => (
-                        <li key={idx} className="flex gap-2.5 items-start">
-                          <span className="w-5 h-5 rounded bg-zinc-900 border border-zinc-850 flex items-center justify-center font-semibold text-zinc-300 flex-shrink-0 text-[10px]">
-                            {idx + 1}
-                          </span>
-                          <span className="leading-relaxed pt-0.5">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                <div className="pt-6 flex justify-end">
-                  <button
-                    onClick={() => navigate('/my-interviews')}
-                    className="bg-white hover:bg-zinc-200 text-black font-semibold py-2 px-4 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
-                  >
-                    Done & Exit
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Answer feedback panels */}
-            {showEvaluation && currentEvaluation && !isComplete && (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-6 space-y-6"
-              >
-                <div className="flex items-center justify-between border-b border-zinc-900/60 pb-3">
-                  <h3 className="text-[10px] font-semibold text-zinc-455 uppercase tracking-widest">Live Feedback Review</h3>
-                  <span className="text-xs font-semibold text-zinc-200">Score: {currentEvaluation.overallScore}/10</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-900 space-y-2">
-                    <span className="text-zinc-500 font-semibold block uppercase tracking-wider text-[9px]">What Went Well</span>
-                    <ul className="list-disc pl-4 space-y-1 text-zinc-300 font-medium">
-                      {currentEvaluation.strengths?.slice(0, 2).map((s, i) => <li key={i}>{s}</li>)}
-                    </ul>
-                  </div>
-                  <div className="p-4 rounded-lg bg-zinc-950 border border-zinc-900 space-y-2">
-                    <span className="text-zinc-500 font-semibold block uppercase tracking-wider text-[9px]">Things to Optimize</span>
-                    <ul className="list-disc pl-4 space-y-1 text-zinc-300 font-medium">
-                      {currentEvaluation.areasForImprovement?.slice(0, 2).map((a, i) => <li key={i}>{a}</li>)}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-900/60">
-                  <button 
-                    onClick={() => setShowEvaluation(false)}
-                    className="text-xs text-zinc-450 hover:text-white cursor-pointer transition-colors"
-                  >
-                    Hide Feedback
-                  </button>
-                  <div className="flex gap-2">
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                    {micError && (
+                      <div style={{ width: '100%', maxWidth: 440, borderRadius: 'var(--r-sm)', border: '1px solid var(--rose-soft)', background: 'var(--rose-soft)', padding: 16, textAlign: 'center' }}>
+                        <p style={{ fontSize: 13.5, color: 'var(--rose)', fontWeight: 600 }}>{micError}</p>
+                        <button className="btn btn--outline btn--sm" style={{ marginTop: 12, background: '#fff' }} onClick={startRecording}>Retry microphone</button>
+                      </div>
+                    )}
                     <button
-                      onClick={handleNextQuestion}
-                      className="bg-white hover:bg-zinc-200 text-black font-semibold py-1.5 px-4 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
+                      onClick={startRecording}
+                      disabled={isRecording || isSubmitting}
+                      aria-label="Start recording"
+                      style={{
+                        width: 56, height: 56, borderRadius: 999, background: 'var(--ink)', color: '#fff',
+                        display: 'grid', placeItems: 'center', cursor: 'pointer', border: 0,
+                        boxShadow: 'var(--sh-md)', opacity: isRecording || isSubmitting ? .5 : 1,
+                      }}
                     >
-                      Next Question
+                      <svg width="22" height="22" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
+                      </svg>
                     </button>
-                    <button
-                      onClick={handleGenerateFollowUp}
-                      disabled={isGeneratingQuestion}
-                      className="bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 font-semibold py-1.5 px-4 rounded-lg text-xs cursor-pointer transition-colors disabled:opacity-50"
-                    >
-                      {isGeneratingQuestion ? 'Drilling...' : 'Drill Down / Follow-up'}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Right panel - History feed */}
-          <div className="space-y-6">
-            <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-5 space-y-4">
-              <h3 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2.5">Session Log</h3>
-              
-              <div className="space-y-3.5 max-h-[400px] overflow-y-auto pr-1">
-                {interview?.questions?.map((qa, idx) => (
-                  <div key={idx} className="p-3 rounded-lg border border-zinc-900 bg-zinc-950 space-y-2">
-                    <div className="flex justify-between text-[9px] font-semibold text-zinc-550 uppercase tracking-wider">
-                      <span>Cycle 0{idx + 1}</span>
-                      <span className="text-zinc-350">Score: {qa.evaluation?.overallScore}/10</span>
-                    </div>
-                    <p className="text-xs text-zinc-300 font-medium leading-relaxed whitespace-pre-wrap">{qa.question}</p>
-                    <p className="text-[11px] text-zinc-500 italic leading-relaxed whitespace-pre-wrap">"{qa.answer}"</p>
-                  </div>
-                ))}
-
-                {(!interview?.questions || interview.questions.length === 0) && (
-                  <div className="text-center py-6 text-xs text-zinc-600 font-medium">
-                    Responses will log here in real-time.
+                    <p className="muted" style={{ fontSize: 13 }}>Click to start recording your response.</p>
+                    {audioURL && (
+                      <audio controls src={audioURL} style={{ width: '100%', maxWidth: 320, height: 34 }} aria-label="Your recorded answer" />
+                    )}
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          ) : (
+            <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="card card--lg card--pad stack" style={{ gap: 22 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--line)', paddingBottom: 20, gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <h2 style={{ fontSize: 26 }}>Practice report card</h2>
+                  <p className="lead" style={{ fontSize: 13.5, marginTop: 6 }}>
+                    Detailed review based on {cycleCount} conversation {cycleCount === 1 ? 'cycle' : 'cycles'}.
+                  </p>
+                </div>
+                <span className="tag tag--accent">
+                  {overallEvaluation?.hiringRecommendation?.decision || 'Practice complete'}
+                </span>
+              </div>
+
+              <div className="stack" style={{ gap: 14 }}>
+                <p className="kicker" style={{ margin: 0 }}>Performance metrics</p>
+                {metrics.map((m) => (
+                  <div key={m.label} style={{ padding: 16, borderRadius: 'var(--r-sm)', background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, marginBottom: 9 }}>
+                      <span>{m.label}</span><span className="muted">{m.score || 0}/10</span>
+                    </div>
+                    <div className="meter"><i style={{ width: `${(m.score || 0) * 10}%` }} /></div>
+                    {m.desc && <p className="muted" style={{ fontSize: 12.5, marginTop: 9 }}>{m.desc}</p>}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 16, borderTop: '1px solid var(--line)', paddingTop: 20 }}>
+                <div className="card" style={{ padding: 18, background: 'var(--green-soft)', borderColor: 'transparent' }}>
+                  <p className="kicker" style={{ color: 'var(--green)', marginBottom: 8 }}>✓ Most impressive</p>
+                  <p style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{overallEvaluation?.mostImpressiveAnswer || 'No specific highlights.'}</p>
+                </div>
+                <div className="card" style={{ padding: 18, background: 'var(--amber-soft)', borderColor: 'transparent' }}>
+                  <p className="kicker" style={{ color: 'var(--amber)', marginBottom: 8 }}>⚠ Key improvement</p>
+                  <p style={{ fontSize: 13.5, color: 'var(--ink-2)' }}>{overallEvaluation?.mostConcerningAnswer || 'No critical bottlenecks identified.'}</p>
+                </div>
+              </div>
+
+              {overallEvaluation?.nextFiveImprovements && (
+                <div style={{ borderTop: '1px solid var(--line)', paddingTop: 20 }}>
+                  <p className="kicker" style={{ marginBottom: 14 }}>Next five things to improve</p>
+                  <ul className="stack" style={{ gap: 10, listStyle: 'none', padding: 0 }}>
+                    {overallEvaluation.nextFiveImprovements.map((item, idx) => (
+                      <li key={idx} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', fontSize: 13.5, color: 'var(--ink-2)' }}>
+                        <span style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 700, flex: 'none' }}>{idx + 1}</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn--ink" onClick={() => navigate('/my-interviews')}>Done &amp; exit</button>
+              </div>
+            </motion.div>
+          )}
+
+          {showEvaluation && currentEvaluation && !isComplete && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card card--lg card--pad stack" style={{ gap: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: 14 }}>
+                <p className="kicker" style={{ margin: 0 }}>Live feedback</p>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 17 }}>{currentEvaluation.overallScore}/10</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14 }}>
+                <div style={{ padding: 16, borderRadius: 'var(--r-sm)', background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                  <p className="kicker" style={{ color: 'var(--accent)', marginBottom: 8 }}>What went well</p>
+                  <ul style={{ paddingLeft: 16, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7 }}>
+                    {currentEvaluation.strengths?.slice(0, 2).map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+                <div style={{ padding: 16, borderRadius: 'var(--r-sm)', background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                  <p className="kicker" style={{ color: 'var(--amber)', marginBottom: 8 }}>Optimize</p>
+                  <ul style={{ paddingLeft: 16, fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.7 }}>
+                    {currentEvaluation.areasForImprovement?.slice(0, 2).map((a, i) => <li key={i}>{a}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+                <button className="link-quiet" style={{ background: 'none', border: 0, cursor: 'pointer' }} onClick={() => setShowEvaluation(false)}>Hide feedback</button>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn btn--outline btn--sm" onClick={handleGenerateFollowUp} disabled={isGeneratingQuestion}>
+                    {isGeneratingQuestion ? 'Drilling…' : 'Drill down'}
+                  </button>
+                  <button className="btn btn--ink btn--sm" onClick={handleNextQuestion}>Next question</button>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
+
+        {/* Session log */}
+        <aside className="card card--lg card--pad" style={{ alignSelf: 'start' }}>
+          <p className="kicker" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 12, marginBottom: 16 }}>Session log</p>
+          <div className="stack" style={{ gap: 12, maxHeight: 460, overflowY: 'auto' }}>
+            {interview?.questions?.map((qa, idx) => (
+              <div key={idx} style={{ padding: 14, borderRadius: 'var(--r-sm)', border: '1px solid var(--line)', background: 'var(--surface-2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>
+                  <span>Cycle 0{idx + 1}</span>
+                  <span>Score {qa.evaluation?.overallScore}/10</span>
+                </div>
+                <p style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 9, fontWeight: 600 }}>{qa.question}</p>
+                <p className="muted" style={{ fontSize: 12, marginTop: 6, fontStyle: 'italic' }}>“{qa.answer}”</p>
+              </div>
+            ))}
+            {(!interview?.questions || interview.questions.length === 0) && (
+              <p className="muted" style={{ fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Responses will log here in real time.</p>
+            )}
+          </div>
+        </aside>
       </div>
 
-      {/* Exit Flow Confirmation Modal */}
+      {/* Exit modal */}
       <AnimatePresence>
         {showExitModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowExitModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            ></motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm rounded-3xl border border-zinc-800 bg-[#0C0C0E] p-6 space-y-6 shadow-2xl text-center font-chakra text-white"
-            >
-              <h3 className="text-lg font-bold">Exit Practice Session?</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                You can save your current question and responses to continue practicing later, or discard this session entirely.
+          <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowExitModal(false)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(14,22,32,.55)', backdropFilter: 'blur(4px)' }} />
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+              className="card card--lg card--pad" style={{ position: 'relative', width: '100%', maxWidth: 400, textAlign: 'center', boxShadow: 'var(--sh-lg)' }}>
+              <h3 style={{ fontSize: 20 }}>Exit practice session?</h3>
+              <p className="lead" style={{ fontSize: 13.5, marginTop: 10 }}>
+                Your current question and responses are saved to your account. You can continue later or discard this session.
               </p>
-              
-              <div className="flex flex-col gap-2.5">
-                <button
-                  onClick={() => handleExitDecision('save')}
-                  className="w-full py-3 rounded-full bg-white text-black font-bold text-xs cursor-pointer hover:scale-[1.02] transition-transform"
-                >
-                  Save & Exit Later
-                </button>
-                <button
-                  onClick={() => handleExitDecision('discard')}
-                  className="w-full py-3 rounded-full border border-red-500/20 bg-red-950/20 hover:bg-red-950/30 text-red-400 font-bold text-xs cursor-pointer"
-                >
-                  Discard Practice Session
-                </button>
-                <button
-                  onClick={() => setShowExitModal(false)}
-                  className="w-full py-3 rounded-full text-zinc-500 hover:text-white font-bold text-xs cursor-pointer"
-                >
-                  Cancel
-                </button>
+              <div className="stack" style={{ gap: 10, marginTop: 22 }}>
+                <button className="btn btn--ink" onClick={() => handleExitDecision('save')}>Save &amp; exit</button>
+                <button className="btn btn--outline" style={{ color: 'var(--rose)', borderColor: 'var(--rose-soft)' }} onClick={() => handleExitDecision('discard')}>Discard session</button>
+                <button className="link-quiet" style={{ background: 'none', border: 0, cursor: 'pointer', marginTop: 4 }} onClick={() => setShowExitModal(false)}>Cancel</button>
               </div>
             </motion.div>
           </div>
