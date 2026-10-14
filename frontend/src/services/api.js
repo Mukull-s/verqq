@@ -1,5 +1,4 @@
-const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+import { API_BASE_URL } from '../config';
 
 // Helper function to determine auth type
 const getAuthType = (token) => {
@@ -118,23 +117,17 @@ export const api = {
     getUserProfile: () => 
         fetchData('/api/user/profile'),
 
-    updateUserProfile: (userData) => 
-        fetchData('/api/user/profile', {
-            method: 'PUT',
-            body: JSON.stringify(userData),
-        }),
-
     // Interviews
-    getInterviews: () => 
-        fetchData('/api/interview'),
+    getInterviews: (params = {}) => {
+        const query = new URLSearchParams();
+        if (params.limit != null) query.set('limit', params.limit);
+        if (params.skip != null) query.set('skip', params.skip);
+        const qs = query.toString();
+        return fetchData(`/api/interview${qs ? `?${qs}` : ''}`);
+    },
 
     getInterviewById: (id) => 
         fetchData(`/api/interview/${id}`),
-
-    generateQuestion: (interviewId) =>
-        fetchData(`/api/interview/${interviewId}/generate-question`, {
-            method: 'POST'
-        }),
 
     analyzeResume: async (formData) => {
         try {
