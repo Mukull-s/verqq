@@ -2,14 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { processPDF } = require('../services/pdfService');
 const { generateInterviewQuestion, evaluateAnswer, generateFollowUpQuestion } = require('../services/geminiService');
-const { textToSpeech } = require('../services/textToSpeechService');
 const { speechToText } = require('../services/deepgramService');
 const { validateConfig } = require('../config/config');
 const { createInterview, updateInterviewStatus, addQuestionAnswer } = require('../services/interviewService');
-
-// Set environment variables
-// process.env.GEMINI_API_KEY = 'AIzaSyDQekyR-NW55U8gWW_9Rzu_PojkivR0UA0';
-// process.env.DEEPGRAM_API_KEY = '11a2141f6e93fc20f32d03b2932c32aefb1c6eeb';
 
 // Validate environment variables
 validateConfig();
@@ -37,10 +32,6 @@ async function runInterviewFlow(userId, pdfPath, role, audioPath = "C:\\Users\\a
 
     // Generate initial question
     const currentQuestion = await generateInterviewQuestion(interview.resumeText, role);
-    
-    // Convert question to speech
-    const questionAudioPath = path.join(path.dirname(audioPath), `question_${Date.now()}.mp3`);
-    await textToSpeech(currentQuestion, questionAudioPath);
 
     // Process 5 questions
     for (let i = 0; i < 5; i++) {

@@ -1,24 +1,14 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { api } from "../services/api";
-import { useNotification } from "../contexts/NotificationContext";
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
+import { useNotification } from '../contexts/NotificationContext';
 
 export default function MyInterviews() {
   const navigate = useNavigate();
   const { showError, showSuccess } = useNotification();
   const [interviews, setInterviews] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Stats aggregations
-  const [stats, setStats] = useState({
-    avgTechnical: 0,
-    avgCommunication: 0,
-    avgProblemSolving: 0,
-    avgConfidence: 0,
-    completedCount: 0
-  });
-
+  const [stats, setStats] = useState({ avgTechnical: 0, avgCommunication: 0, avgProblemSolving: 0, avgConfidence: 0, completedCount: 0 });
   const [weakTopics, setWeakTopics] = useState([]);
 
   const fetchHistory = async () => {
@@ -29,40 +19,27 @@ export default function MyInterviews() {
         const list = response.data;
         setInterviews(list);
 
-        // Aggregate statistics
-        const completed = list.filter(i => i.status === 'completed');
+        const completed = list.filter((i) => i.status === 'completed');
         if (completed.length > 0) {
-          let techSum = 0;
-          let commSum = 0;
-          let problemSum = 0;
-          let confSum = 0;
+          let techSum = 0, commSum = 0, problemSum = 0, confSum = 0;
           let allWeaknesses = [];
-
-          completed.forEach(item => {
+          completed.forEach((item) => {
             const evalObj = item.overallEvaluation || {};
             techSum += evalObj.technicalProficiency?.score || 0;
             commSum += evalObj.communicationSkills?.score || 0;
             problemSum += evalObj.problemSolvingAbility?.score || 0;
             confSum += evalObj.confidence?.score || 0;
-            
-            // Gather areas for growth as weak topics
-            if (evalObj.areasForGrowth) {
-              allWeaknesses = [...allWeaknesses, ...evalObj.areasForGrowth];
-            }
+            if (evalObj.areasForGrowth) allWeaknesses = [...allWeaknesses, ...evalObj.areasForGrowth];
           });
-
           const n = completed.length;
           setStats({
             avgTechnical: Number((techSum / n).toFixed(1)),
             avgCommunication: Number((commSum / n).toFixed(1)),
             avgProblemSolving: Number((problemSum / n).toFixed(1)),
             avgConfidence: Number((confSum / n).toFixed(1)),
-            completedCount: n
+            completedCount: n,
           });
-
-          // Unique weaknesses to show as Weak Topics
-          const uniqueWeaknesses = [...new Set(allWeaknesses)].slice(0, 5);
-          setWeakTopics(uniqueWeaknesses);
+          setWeakTopics([...new Set(allWeaknesses)].slice(0, 6));
         }
       }
     } catch (err) {
@@ -73,17 +50,11 @@ export default function MyInterviews() {
     }
   };
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
+  useEffect(() => { fetchHistory(); }, []);
 
   const handleContinue = (interviewId, questionsList) => {
-    // If the interview is in progress, check if first question is saved
     const lastQuestion = questionsList?.[questionsList.length - 1]?.question;
-    localStorage.setItem('currentInterview', JSON.stringify({
-      id: interviewId,
-      question: lastQuestion || 'Let us discuss your experiences.'
-    }));
+    localStorage.setItem('currentInterview', JSON.stringify({ id: interviewId, question: lastQuestion || 'Let us discuss your experiences.' }));
     navigate(`/interview/session/${interviewId}`);
   };
 
@@ -98,15 +69,11 @@ export default function MyInterviews() {
         interviewType: item.interviewType || 'fullstack',
         resumeText: item.resumeText,
         resumeProfile: item.resumeProfile,
-        roadmap: item.roadmap || []
+        roadmap: item.roadmap || [],
       };
-
       const response = await api.createInterview(payload);
       if (response.status === 'success' && response.data && response.data.interviewId) {
-        localStorage.setItem('currentInterview', JSON.stringify({
-          id: response.data.interviewId,
-          question: response.data.question
-        }));
+        localStorage.setItem('currentInterview', JSON.stringify({ id: response.data.interviewId, question: response.data.question }));
         navigate(`/interview/session/${response.data.interviewId}`);
       }
     } catch (err) {
@@ -115,195 +82,127 @@ export default function MyInterviews() {
     }
   };
 
-  const handleViewReport = (interviewId) => {
-    navigate(`/interview/session/${interviewId}`);
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen pt-32 px-4 flex flex-col items-center justify-center bg-[#09090B] font-chakra text-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-2 border-t-purple-500 border-b-zinc-800"></div>
-        <p className="mt-4 text-xs font-semibold text-zinc-500 uppercase tracking-widest">Loading Dashboard...</p>
+      <div className="wrap" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div className="spin" style={{ width: 40, height: 40, borderRadius: 999, border: '3px solid var(--line)', borderTopColor: 'var(--accent)' }} />
+        <p className="kicker">Loading dashboard…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen pt-28 px-4 sm:px-8 bg-[#09090B] pb-24 text-white relative">
-      <div className="max-w-6xl mx-auto space-y-10">
-        
-        {/* Header Title */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-zinc-900 pb-6">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">Dashboard</h1>
-            <p className="text-xs text-zinc-500 mt-1">Review your practice history, aggregate scores, and improvement focus areas.</p>
-          </div>
-          <button
-            onClick={() => navigate('/interview')}
-            className="inline-flex items-center justify-center bg-white hover:bg-zinc-200 text-black font-semibold py-2 px-4 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
-          >
-            Start New Practice
-          </button>
+    <div className="wrap" style={{ paddingTop: 40, paddingBottom: 72 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--line)', paddingBottom: 24, marginBottom: 30, gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 'clamp(28px,3.4vw,40px)' }}>Dashboard</h1>
+          <p className="lead" style={{ fontSize: 14.5, marginTop: 8 }}>Your practice history, aggregate scores and focus areas.</p>
         </div>
-
-        {interviews.length === 0 ? (
-          /* Empty State */
-          <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-12 text-center max-w-md mx-auto space-y-5">
-            <div className="w-12 h-12 rounded-lg bg-zinc-950 border border-zinc-900 flex items-center justify-center text-zinc-500 mx-auto text-xl">
-              📊
-            </div>
-            <h3 className="text-sm font-semibold text-zinc-200">No interviews recorded</h3>
-            <p className="text-xs text-zinc-500 leading-relaxed max-w-xs mx-auto">
-              You haven't completed any mock practice sessions yet. Upload a resume and practice targeting top companies.
-            </p>
-            <button
-              onClick={() => navigate('/interview')}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 px-4 rounded-lg text-xs cursor-pointer transition-colors"
-            >
-              Practice Now
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Left columns - Interview History */}
-            <div className="lg:col-span-2 space-y-6">
-              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Recent Practice Sessions</h3>
-              
-              <div className="space-y-4">
-                {interviews.map((item) => {
-                  const isCompleted = item.status === 'completed';
-                  const score = item.overallEvaluation?.overallScore || 0;
-                  const progressColor = 'bg-zinc-300';
-
-                  return (
-                    <motion.div
-                      key={item._id}
-                      className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-5 flex flex-col sm:flex-row justify-between gap-6 hover:border-zinc-800 transition-colors"
-                      whileHover={{ y: -1 }}
-                    >
-                      <div className="space-y-3 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-white">{item.targetCompany}</span>
-                          <span className="text-[10px] text-zinc-500">•</span>
-                          <span className="text-xs text-zinc-400 capitalize">{item.jobRole}</span>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                          <span className={`px-2 py-0.5 rounded border ${
-                            isCompleted ? 'bg-zinc-900/60 border-zinc-850 text-zinc-500' : 'bg-zinc-900 border-zinc-800 text-zinc-300 font-semibold'
-                          }`}>
-                            {item.status.replace('_', ' ')}
-                          </span>
-                          <span>•</span>
-                          <span>{item.difficulty} level</span>
-                        </div>
-
-                        {/* Miniature progress bar for score */}
-                        {isCompleted && (
-                          <div className="space-y-1.5 w-full max-w-[200px] pt-1">
-                            <div className="flex justify-between text-[10px] text-zinc-500 font-medium">
-                              <span>Overall Accuracy</span>
-                              <span className="text-zinc-400">{score * 10}%</span>
-                            </div>
-                            <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
-                              <div className={`h-full ${progressColor}`} style={{ width: `${score * 10}%` }}></div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card actions */}
-                      <div className="flex sm:flex-col justify-end items-end gap-3 self-center sm:self-auto">
-                        {isCompleted ? (
-                          <>
-                            <button
-                              onClick={() => handleViewReport(item._id)}
-                              className="w-full sm:w-auto text-center bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-200 font-medium py-1.5 px-4 rounded-lg text-xs cursor-pointer transition-colors"
-                            >
-                              View Report
-                            </button>
-                            <button
-                              onClick={() => handlePracticeAgain(item)}
-                              className="w-full sm:w-auto text-center text-zinc-400 hover:text-white font-medium text-xs cursor-pointer transition-colors"
-                            >
-                              Practice Again
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => handleContinue(item._id, item.questions)}
-                            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 px-4 rounded-lg text-xs cursor-pointer transition-colors shadow-sm"
-                          >
-                            Continue Session
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right column - Dashboard Statistics */}
-            <div className="space-y-6">
-              
-              {/* Aggregated progress stats */}
-              {stats.completedCount > 0 && (
-                <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-5 space-y-4">
-                  <h3 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2.5">Weekly Progress</h3>
-                  
-                  <div className="space-y-3">
-                    {[
-                      { name: 'Technical Depth', score: stats.avgTechnical },
-                      { name: 'Communication Clarity', score: stats.avgCommunication },
-                      { name: 'Problem Solving Method', score: stats.avgProblemSolving },
-                      { name: 'Speaking Confidence', score: stats.avgConfidence }
-                    ].map(metric => (
-                      <div key={metric.name} className="space-y-1.5">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-zinc-500">{metric.name}</span>
-                          <span className="text-zinc-350 font-semibold">{metric.score}/10</span>
-                        </div>
-                        <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden">
-                          <div className="h-full bg-zinc-300 rounded-full" style={{ width: `${metric.score * 10}%` }}></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Weak Topics / Growth areas */}
-              {weakTopics.length > 0 && (
-                <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-5 space-y-3">
-                  <h3 className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest border-b border-zinc-900 pb-2.5">Weak Topics</h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {weakTopics.map(topic => (
-                      <span
-                        key={topic}
-                        className="px-2.5 py-1 rounded border border-zinc-800 bg-zinc-900/60 text-zinc-300 text-[11px] font-medium"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-zinc-550 leading-relaxed pt-1">
-                    AI identified these topics as having notable gaps. Practice company profiles matching these areas.
-                  </p>
-                </div>
-              )}
-
-              {/* Quick statistics summary */}
-              <div className="rounded-lg border border-zinc-900 bg-[#0C0C0E]/50 p-5 text-center space-y-1">
-                <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Total Practiced Sessions</span>
-                <p className="text-3xl font-bold text-white pt-1">{stats.completedCount}</p>
-              </div>
-
-            </div>
-          </div>
-        )}
+        <button className="btn btn--accent" onClick={() => navigate('/interview')}>+ New practice</button>
       </div>
+
+      {interviews.length === 0 ? (
+        <div className="card card--lg card--pad" style={{ maxWidth: 460, margin: '0 auto', textAlign: 'center', padding: 48 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', margin: '0 auto 18px', color: 'var(--ink-3)' }}>
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" d="M3 3v18h18M8 17V9m5 8V5m5 12v-6" /></svg>
+          </div>
+          <h3 style={{ fontSize: 18 }}>No interviews recorded</h3>
+          <p className="lead" style={{ fontSize: 13.5, marginTop: 10, maxWidth: 300, margin: '10px auto 0' }}>
+            You haven’t completed any mock practice sessions yet. Upload a resume and target a company to begin.
+          </p>
+          <button className="btn btn--accent" style={{ marginTop: 22 }} onClick={() => navigate('/interview')}>Practice now</button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.95fr) minmax(0,1fr)', gap: 26, alignItems: 'start' }} className="dash-grid">
+          <div>
+            <p className="kicker" style={{ marginBottom: 16 }}>Recent sessions</p>
+            <div className="stack" style={{ gap: 16 }}>
+              {interviews.map((item) => {
+                const isCompleted = item.status === 'completed';
+                const score = item.overallEvaluation?.overallScore || 0;
+                return (
+                  <div key={item._id} className="card card--lg card--pad" style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600 }}>{item.targetCompany}</span>
+                        <span className="muted" style={{ fontSize: 13.5 }}>{item.jobRole}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 11, flexWrap: 'wrap' }}>
+                        <span className={`tag ${isCompleted ? 'tag--green' : 'tag--amber'}`}>{item.status.replace('_', ' ')}</span>
+                        <span className="tag">{item.difficulty}</span>
+                        {item.duration ? <span className="tag">{item.duration} min</span> : null}
+                      </div>
+                      {isCompleted && (
+                        <div style={{ maxWidth: 240, marginTop: 15 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, marginBottom: 7 }}>
+                            <span className="muted">Overall</span><span>{score * 10}%</span>
+                          </div>
+                          <div className="meter"><i style={{ width: `${score * 10}%` }} /></div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 150 }}>
+                      {isCompleted ? (
+                        <>
+                          <button className="btn btn--outline btn--sm" onClick={() => navigate(`/interview/session/${item._id}`)}>View report</button>
+                          <button className="link-quiet" style={{ color: 'var(--accent)', background: 'none', border: 0, cursor: 'pointer' }} onClick={() => handlePracticeAgain(item)}>Practice again</button>
+                        </>
+                      ) : (
+                        <button className="btn btn--accent btn--sm" onClick={() => handleContinue(item._id, item.questions)}>Continue session</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="stack" style={{ gap: 20 }}>
+            {stats.completedCount > 0 && (
+              <div className="card card--lg card--pad">
+                <p className="kicker" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 12, marginBottom: 16 }}>Overall progress</p>
+                {[
+                  ['Technical depth', stats.avgTechnical],
+                  ['Communication clarity', stats.avgCommunication],
+                  ['Problem solving', stats.avgProblemSolving],
+                  ['Confidence', stats.avgConfidence],
+                ].map(([l, v], i) => (
+                  <div key={l} style={{ marginBottom: 15 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                      <span>{l}</span><span className="muted">{v}/10</span>
+                    </div>
+                    <div className={`meter ${i === 1 ? 'meter--amber' : ''}`}><i style={{ width: `${v * 10}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {weakTopics.length > 0 && (
+              <div className="card card--lg card--pad">
+                <p className="kicker" style={{ borderBottom: '1px solid var(--line)', paddingBottom: 12, marginBottom: 16 }}>Weak topics</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {weakTopics.map((t) => <span key={t} className="tag">{t}</span>)}
+                </div>
+                <p className="muted" style={{ fontSize: 12.5, marginTop: 15 }}>VerQ will target these in your next session.</p>
+              </div>
+            )}
+
+            <div className="sky" style={{ borderRadius: 'var(--r-lg)', padding: 28, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }} viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice">
+                <filter id="vq-stat-clouds"><feGaussianBlur stdDeviation="24" /></filter>
+                <g filter="url(#vq-stat-clouds)" fill="#fff">
+                  <ellipse cx="90" cy="60" rx="120" ry="70" opacity=".6" />
+                  <ellipse cx="320" cy="140" rx="140" ry="80" opacity=".5" />
+                </g>
+              </svg>
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                <p className="kicker" style={{ color: 'rgba(245,249,252,.8)' }}>Sessions completed</p>
+                <p style={{ fontFamily: 'var(--font-display)', fontSize: 46, fontWeight: 600, color: '#F4F8FB', marginTop: 6 }}>{stats.completedCount}</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

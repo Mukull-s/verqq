@@ -30,20 +30,39 @@ const upload = multer({
 });
 
 // Security middleware
-app.use(helmet()); // Adds various HTTP headers for security
+// Content-Security-Policy + sane defaults. The API returns JSON, so a strict
+// CSP mainly protects any accidental HTML/static responses.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+})); // Adds various HTTP headers for security
+const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(',') 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
   : ['http://localhost:5173', 'http://localhost:5174', 'https://verqai.vercel.app', 'https://verq-ai.vercel.app'];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl requests)
+    // Allow non-browser clients (curl, mobile) that send no Origin header.
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+    // Explicit allowlist always wins.
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    // The *.vercel.app wildcard is only tolerated outside production
+    // (preview deploys). In production only the allowlist is honored (VRQ-021).
+    if (!isProduction && origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
     // In development mode, allow localhost origins
-    if (process.env.NODE_ENV === 'development' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
+    if (!isProduction && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) {
       return callback(null, true);
     }
     return callback(new Error('The CORS policy for this site does not allow access from the specified Origin.'), false);
@@ -56,14 +75,26 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+// Rate limiting: strict for auth, looser for interview loop (5+ calls per session)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { status: 'error', message: 'Too many auth attempts, try again later.' }
 });
-app.use(limiter);
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300
+});
+app.use('/api/auth', authLimiter);
+app.use('/api', apiLimiter);
 
 // Logging middleware
+// Attach a lightweight correlation id to every request for log tracing (VRQ-023).
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || require('crypto').randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
 app.use(morgan('dev'));
 
 // Body parsing middleware
@@ -150,26 +181,28 @@ const connectDB = async () => {
   }
 };
 
-// Auto-seeding helper
+// Auto-seeding helper (development only, never log passwords, no weak default — VRQ-004)
 const seedDefaultCandidate = async () => {
+  if (process.env.NODE_ENV === 'production') return;
+  const password = process.env.SEED_CANDIDATE_PASSWORD;
+  if (!password || password.length < 8) {
+    // Do not silently create a public account with a guessable password.
+    return;
+  }
   try {
     const User = require('./models/User');
-    const email = 'candidate@verq.com';
+    const email = process.env.SEED_CANDIDATE_EMAIL || 'candidate@verq.com';
     const existingUser = await User.findOne({ email });
     if (!existingUser) {
       console.log('No candidate user found. Seeding default candidate account...');
       await User.create({
-        displayName: 'Aman Aziz',
+        displayName: process.env.SEED_CANDIDATE_NAME || 'Aman Aziz',
         email: email,
-        password: 'password123',
+        password,
         authMethod: 'jwt',
         isEmailVerified: true
       });
-      console.log('----------------------------------------------------');
-      console.log('Default Candidate User Seeded Successfully!');
-      console.log('Email: candidate@verq.com');
-      console.log('Password: password123');
-      console.log('----------------------------------------------------');
+      console.log('Default candidate seeded:', email);
     } else {
       console.log('Candidate user already exists in database.');
     }

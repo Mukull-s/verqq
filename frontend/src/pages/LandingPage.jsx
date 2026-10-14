@@ -1,7 +1,22 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { isAuthenticated } from '../services/authService';
+
+/* Soft cloudscape rendered as blurred SVG ellipses layered into the sky. */
+const Clouds = () => (
+  <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }} viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+    <filter id="vq-clouds"><feGaussianBlur stdDeviation="34" /></filter>
+    <g filter="url(#vq-clouds)" fill="#ffffff">
+      <ellipse cx="240" cy="250" rx="320" ry="140" opacity=".72" />
+      <ellipse cx="500" cy="340" rx="270" ry="120" opacity=".5" />
+      <ellipse cx="1310" cy="200" rx="340" ry="140" opacity=".62" />
+      <ellipse cx="1070" cy="330" rx="230" ry="110" opacity=".42" />
+      <ellipse cx="830" cy="770" rx="460" ry="175" opacity=".58" />
+      <ellipse cx="290" cy="740" rx="310" ry="140" opacity=".44" />
+      <ellipse cx="1520" cy="650" rx="290" ry="140" opacity=".38" />
+    </g>
+  </svg>
+);
 
 export default function LandingPage() {
   const [isAuth, setIsAuth] = useState(false);
@@ -9,244 +24,198 @@ export default function LandingPage() {
   const [activeFaq, setActiveFaq] = useState(null);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    let mounted = true;
+    (async () => {
       try {
         const auth = await isAuthenticated();
-        setIsAuth(auth);
-      } catch (error) {
-        setIsAuth(false);
+        if (mounted) setIsAuth(auth);
+      } catch {
+        if (mounted) setIsAuth(false);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
-    };
-    checkAuth();
+    })();
+    return () => { mounted = false; };
   }, []);
 
-  const toggleFaq = (index) => {
-    setActiveFaq(activeFaq === index ? null : index);
-  };
+  const startHref = isAuth ? '/interview' : '/login';
 
   const faqs = [
     {
-      q: "How does VerQ prepare me for interviews?",
-      a: "VerQ parses your resume and extracts key projects and skills. It generates personalized technical questions tailored to your target job role and difficulty, adjusting the depth in real time."
+      q: 'How does VerQ prepare me for interviews?',
+      a: 'VerQ parses your resume and extracts key projects and skills. It generates personalized technical questions tailored to your target role and difficulty, adjusting depth in real time.',
     },
     {
-      q: "Are the interview questions specific to companies?",
-      a: "Yes! VerQ models target styles for top product companies (like Google's algorithmic focus, Amazon's leadership principles, or Cisco's networking depth) and supports any custom company persona you type in."
+      q: 'Are the questions specific to companies?',
+      a: 'Yes. VerQ models target styles for top product companies — Google’s algorithmic focus, Amazon’s leadership principles, Cisco’s networking depth — and supports any custom company persona you type in.',
     },
     {
-      q: "Do I get feedback on my performance?",
-      a: "Absolutely. At the end of each session, you receive a detailed report card grading your technical accuracy, communication skills, and problem solving, alongside a 5-point Action Plan for growth."
+      q: 'Do I get feedback on my performance?',
+      a: 'At the end of every session you receive a report card grading technical accuracy, communication and problem solving, alongside a five-point action plan for growth.',
     },
     {
-      q: "Can I practice with voice or text?",
-      a: "You can interact naturally using your microphone. VerQ supports real-time speech-to-text transcription and can speak questions back to you aloud using speech synthesis."
-    }
+      q: 'Can I practice with voice or text?',
+      a: 'You answer naturally using your microphone. VerQ transcribes your speech and can read questions back aloud with browser speech synthesis.',
+    },
+  ];
+
+  const features = [
+    ['01', 'Voice-native scoring', 'Your answer is transcribed and scored on substance and delivery together — clarity, technical accuracy and language.'],
+    ['02', 'Grounded in your resume', 'Questions are generated from your real projects and the role you target. No generic question banks.'],
+    ['03', 'A plan, not a number', 'Every session produces an overall report with the exact gaps to drill before next time.'],
+  ];
+
+  const steps = [
+    ['01', 'Upload resume', 'Drag-and-drop your resume. VerQ extracts your skills, projects and experience.'],
+    ['02', 'Configure goals', 'Pick your interview type, difficulty, target company and preparation goals.'],
+    ['03', 'Practice out loud', 'Speak your responses. VerQ asks follow-ups to probe your real depth.'],
+    ['04', 'Get your report', 'Receive graded metrics and five concrete things to improve.'],
   ];
 
   return (
-    <div className="min-h-screen w-full bg-[#09090B] text-white relative overflow-hidden font-chakra">
-      {/* Premium Cybernetic SVG Grid Backdrop */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" className="text-zinc-700" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-        {/* Glowing Radial Vignette Lights */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] rounded-full bg-purple-900/10 blur-[130px]" />
-        <div className="absolute top-1/3 right-0 w-[500px] h-[500px] rounded-full bg-cyan-900/5 blur-[120px]" />
-      </div>
-
-      {/* Hero Section */}
-      <section className="relative z-10 min-h-[90vh] flex flex-col items-center justify-center text-center px-4 pt-20">
-        <div className="max-w-4xl mx-auto space-y-8">
-          
-          <motion.div 
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-500/25 bg-purple-950/20 text-purple-300 text-xs font-semibold tracking-wider uppercase"
-            initial={{ opacity: 0, y: -15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
-            <span>AI Interview Intelligence</span>
-          </motion.div>
-
-          <motion.h1 
-            className="text-5xl sm:text-7xl md:text-8xl font-black tracking-tight leading-none text-white"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1 }}
-          >
-            Interview <span className="gradient-text font-black">Smarter.</span>
-          </motion.h1>
-
-          <motion.p 
-            className="text-xl sm:text-2xl font-light text-zinc-400 max-w-2xl mx-auto leading-relaxed"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            Elevate your technical communication and practice dynamic mock interviews tailored to your resume stack.
-          </motion.p>
-
-          {!loading && (
-            <motion.div 
-              className="pt-6"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-            >
-              <Link 
-                to={isAuth ? "/interview" : "/login"}
-                className="inline-flex items-center justify-center gap-2.5 bg-white text-black font-bold py-4.5 px-11 rounded-full transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.25)] text-sm cursor-pointer"
-              >
-                {isAuth ? "Start Free Practice" : "Login to Begin"}
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </Link>
-            </motion.div>
-          )}
-        </div>
-      </section>
-
-      {/* Features Grid Section */}
-      <section className="relative z-10 py-24 px-4 max-w-7xl mx-auto border-t border-zinc-900">
-        <div className="text-center space-y-4 mb-16">
-          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight">Supercharge Your Prep</h2>
-          <p className="text-zinc-450 max-w-xl mx-auto">Get realistic, deep technical conversations designed specifically for your experience profile.</p>
+    <div>
+      {/* ============================ HERO ============================ */}
+      <section className="wrap" style={{ paddingTop: 96, paddingBottom: 56 }}>
+        <div className="sky reveal" style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--sh-lg)', minHeight: 620, display: 'grid', placeItems: 'center', textAlign: 'center', border: '1px solid rgba(255,255,255,.6)' }}>
+          <Clouds />
+          <div style={{ maxWidth: 760, padding: '80px 24px' }}>
+            <span className="tag tag--glass" style={{ marginBottom: 26 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#BFE3CF', display: 'inline-block' }} />
+              Private beta · 2026 cohort
+            </span>
+            <h1 style={{ fontSize: 'clamp(44px, 6.4vw, 78px)', color: '#F4F8FB', textShadow: '0 2px 30px rgba(40,60,80,.25)', lineHeight: 1.02 }}>
+              Rehearse out loud.<br />Walk in <em className="serif">ready</em>.
+            </h1>
+            <p style={{ color: 'rgba(245,249,252,.9)', fontSize: 'clamp(15px, 1.5vw, 18px)', maxWidth: 560, margin: '24px auto 0', lineHeight: 1.6 }}>
+              Say goodbye to guessing. VerQ listens to your spoken answers, scores them against the role you’re chasing, and shows exactly where to tighten up.
+            </p>
+            {!loading && (
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 34, flexWrap: 'wrap' }}>
+                <Link to={startHref} className="btn btn--white btn--lg">
+                  {isAuth ? 'Start practising' : 'Start free practice'} →
+                </Link>
+                <a href="#how" className="btn btn--ghost btn--lg">How it works</a>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 1 */}
-          <div className="p-8 rounded-2xl border border-zinc-850 bg-zinc-950/30 backdrop-blur-sm space-y-4 hover:border-purple-500/25 hover:bg-zinc-950/50 transition-all duration-300 group">
-            <div className="w-12 h-12 rounded-xl bg-purple-950/40 border border-purple-500/20 flex items-center justify-center text-purple-400 text-xl font-bold group-hover:scale-105 transition-transform">📄</div>
-            <h3 className="text-lg font-bold text-white">Resume-Driven Questions</h3>
-            <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-              We analyze your uploaded experience, projects, and tech stack to construct custom interview paths. No generic questions.
-            </p>
-          </div>
-
-          {/* Card 2 */}
-          <div className="p-8 rounded-2xl border border-zinc-850 bg-zinc-950/30 backdrop-blur-sm space-y-4 hover:border-cyan-500/25 hover:bg-zinc-950/50 transition-all duration-300 group">
-            <div className="w-12 h-12 rounded-xl bg-cyan-950/40 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl font-bold group-hover:scale-105 transition-transform">📈</div>
-            <h3 className="text-lg font-bold text-white">Dynamic Difficulty</h3>
-            <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-              Questions automatically get harder or easier in real-time based on the technical accuracy and depth of your answers.
-            </p>
-          </div>
-
-          {/* Card 3 */}
-          <div className="p-8 rounded-2xl border border-zinc-850 bg-zinc-950/30 backdrop-blur-sm space-y-4 hover:border-emerald-500/25 hover:bg-zinc-950/50 transition-all duration-300 group">
-            <div className="w-12 h-12 rounded-xl bg-emerald-950/40 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xl font-bold group-hover:scale-105 transition-transform">🎙️</div>
-            <h3 className="text-lg font-bold text-white">Natural Voice Dialogue</h3>
-            <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-              Answer aloud using your microphone. Experience realistic conversational pacing with optional live audio reading.
-            </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, margin: '34px 6px 0', flexWrap: 'wrap' }}>
+          <p className="kicker">Candidates targeting</p>
+          <div style={{ display: 'flex', gap: 34, alignItems: 'center', opacity: .55, flexWrap: 'wrap' }}>
+            {['Google', 'Amazon', 'Flipkart', 'Cisco', 'Atlassian'].map((x) => (
+              <span key={x} style={{ fontFamily: 'var(--font-display)', fontWeight: 500, fontSize: 15, letterSpacing: '-.01em' }}>{x}</span>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* AI Workflow / How it works Section */}
-      <section className="relative z-10 py-24 px-4 bg-zinc-950/20 border-t border-zinc-900">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center space-y-4 mb-20">
-            <h2 className="text-3xl sm:text-5xl font-bold tracking-tight">How It Works</h2>
-            <p className="text-zinc-455 max-w-xl mx-auto font-medium">From resume upload to comprehensive feedback report in minutes.</p>
+      {/* ========================== FEATURES ========================== */}
+      <section className="wrap" style={{ paddingTop: 40, paddingBottom: 24 }}>
+        <hr className="hair" style={{ marginBottom: 64 }} />
+        <div style={{ maxWidth: 660 }}>
+          <p className="kicker eyebrow-dot">Why VerQ</p>
+          <h2 className="display-l" style={{ marginTop: 16 }}>Built for the parts a text tool can’t measure.</h2>
+          <p className="lead" style={{ marginTop: 14, maxWidth: 520 }}>
+            Pace, filler words, structure and depth — judged the way a real interviewer hears them, then turned into a plan.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: 20, marginTop: 36 }}>
+          {features.map(([n, t, d]) => (
+            <article key={n} className="card card--lg" style={{ padding: 30 }}>
+              <span className="kicker" style={{ color: 'var(--ink-4)' }}>{n}</span>
+              <h3 style={{ fontSize: 21, margin: '16px 0 9px' }}>{t}</h3>
+              <p className="lead" style={{ fontSize: 14.5 }}>{d}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ========================= HOW IT WORKS ======================= */}
+      <section id="how" className="wrap" style={{ paddingTop: 72, paddingBottom: 24 }}>
+        <hr className="hair" style={{ marginBottom: 64 }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 24, flexWrap: 'wrap' }}>
+          <div>
+            <p className="kicker eyebrow-dot">The process</p>
+            <h2 className="display-l" style={{ marginTop: 16 }}>From resume to report in minutes.</h2>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {/* Step 1 */}
-            <div className="space-y-4">
-              <div className="text-5xl font-black text-purple-500/20">01</div>
-              <h3 className="text-lg font-bold text-white">Upload Resume</h3>
-              <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-                Drag-and-drop your resume. VerQ extracts your skills and projects.
-              </p>
+          <p className="lead" style={{ maxWidth: 320, fontSize: 14.5 }}>Four steps, no setup ceremony. You’ll be answering questions within a minute.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4" style={{ gap: 20, marginTop: 40 }}>
+          {steps.map(([n, t, d]) => (
+            <div key={n} className="card" style={{ padding: 26, background: 'var(--surface-2)' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 600, color: 'rgba(44,90,105,.22)' }}>{n}</div>
+              <h3 style={{ fontSize: 17, margin: '12px 0 8px' }}>{t}</h3>
+              <p className="lead" style={{ fontSize: 13.5 }}>{d}</p>
             </div>
+          ))}
+        </div>
+      </section>
 
-            {/* Step 2 */}
-            <div className="space-y-4">
-              <div className="text-5xl font-black text-cyan-500/20">02</div>
-              <h3 className="text-lg font-bold text-white">Configure Goals</h3>
-              <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-                Pick your interview type, difficulty, target company, and preparation goals.
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="space-y-4">
-              <div className="text-5xl font-black text-indigo-500/20">03</div>
-              <h3 className="text-lg font-bold text-white">Interactive Practice</h3>
-              <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-                Speak your responses aloud. AI asks follow-up questions to test your depth.
-              </p>
-            </div>
-
-            {/* Step 4 */}
-            <div className="space-y-4">
-              <div className="text-5xl font-black text-emerald-500/20">04</div>
-              <h3 className="text-lg font-bold text-white">Detailed Report</h3>
-              <p className="text-sm text-zinc-450 leading-relaxed font-medium">
-                Receive graded metrics (Technical, Communication, Confidence) and five things to improve.
-              </p>
-            </div>
+      {/* =========================== PROGRESS ========================= */}
+      <section className="wrap" style={{ paddingTop: 72, paddingBottom: 24 }}>
+        <hr className="hair" style={{ marginBottom: 64 }} />
+        <div className="card card--lg" style={{ display: 'grid', overflow: 'hidden', boxShadow: 'var(--sh-md)' }} id="progress-split">
+          <div style={{ padding: '48px 44px', background: 'linear-gradient(180deg, #fff, #F7F9FB)' }}>
+            <p className="kicker eyebrow-dot">Your progress</p>
+            <h2 className="display-l" style={{ marginTop: 16, fontSize: 'clamp(26px,3vw,38px)' }}>Weak topics follow you across sessions.</h2>
+            <p className="lead" style={{ fontSize: 14.5, maxWidth: 380, marginTop: 12 }}>
+              VerQ remembers which areas cost you points and quietly aims the next session at them.
+            </p>
+            <Link to={isAuth ? '/my-interviews' : startHref} className="btn btn--ink" style={{ marginTop: 24 }}>View dashboard</Link>
+          </div>
+          <div style={{ padding: '48px 44px', borderLeft: '1px solid var(--line)', background: '#fff' }}>
+            {[['Technical depth', 76, ''], ['Communication', 68, 'meter--amber'], ['Problem solving', 71, ''], ['Confidence', 82, '']].map(([l, v, c]) => (
+              <div key={l} style={{ marginBottom: 22 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, marginBottom: 9 }}>
+                  <span>{l}</span><span className="muted">{v}%</span>
+                </div>
+                <div className={`meter ${c}`}><i style={{ width: `${v}%` }} /></div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* FAQS Accordion Section */}
-      <section className="relative z-10 py-24 px-4 max-w-4xl mx-auto border-t border-zinc-900">
-        <div className="text-center space-y-4 mb-16">
-          <h2 className="text-3xl sm:text-5xl font-bold tracking-tight">Frequently Asked Questions</h2>
-        </div>
-
-        <div className="space-y-4">
+      {/* ============================= FAQ ============================ */}
+      <section className="wrap" style={{ paddingTop: 72, paddingBottom: 24, maxWidth: 900 }}>
+        <hr className="hair" style={{ marginBottom: 64 }} />
+        <h2 className="display-l" style={{ textAlign: 'center', marginBottom: 40 }}>Frequently asked questions</h2>
+        <div className="stack" style={{ gap: 12 }}>
           {faqs.map((faq, idx) => (
-            <div 
-              key={idx}
-              className="rounded-2xl border border-zinc-850 bg-zinc-950/30 overflow-hidden transition-all duration-300"
-            >
+            <div key={idx} className="card card--lg" style={{ overflow: 'hidden' }}>
               <button
-                onClick={() => toggleFaq(idx)}
-                className="w-full flex items-center justify-between p-6 text-left focus:outline-none cursor-pointer hover:bg-zinc-900/30 transition-colors"
+                onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
+                className="w-full flex items-center justify-between"
+                style={{ padding: '22px 26px', textAlign: 'left', cursor: 'pointer', background: 'transparent', border: 0 }}
               >
-                <span className="font-bold text-base sm:text-lg pr-4">{faq.q}</span>
-                <span className="text-xl text-zinc-400 transition-transform duration-300">
-                  {activeFaq === idx ? '−' : '+'}
-                </span>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 17, color: 'var(--ink)', paddingRight: 16 }}>{faq.q}</span>
+                <span style={{ fontSize: 22, color: 'var(--ink-3)', lineHeight: 1 }}>{activeFaq === idx ? '−' : '+'}</span>
               </button>
-              <div 
-                className={`transition-all duration-300 ease-in-out ${
-                  activeFaq === idx ? 'max-h-48 border-t border-zinc-900/40 p-6' : 'max-h-0'
-                } overflow-hidden text-sm text-zinc-400 leading-relaxed`}
-              >
-                {faq.a}
+              <div style={{ maxHeight: activeFaq === idx ? 240 : 0, overflow: 'hidden', transition: 'max-height .3s ease', borderTop: activeFaq === idx ? '1px solid var(--line)' : 'none' }}>
+                <p className="lead" style={{ fontSize: 14.5, padding: '20px 26px' }}>{faq.a}</p>
               </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="relative z-10 py-20 px-4 max-w-6xl mx-auto">
-        <div className="rounded-3xl border border-purple-500/20 bg-[radial-gradient(ellipse_at_top_right,rgba(107,33,168,0.08),transparent_50%)] bg-zinc-950/60 p-8 sm:p-16 text-center space-y-6 relative overflow-hidden shadow-2xl">
-          <h2 className="text-3xl sm:text-5xl font-bold">Ready to stand out?</h2>
-          <p className="text-zinc-400 max-w-md mx-auto text-sm sm:text-base leading-relaxed">
-            Get instant, personalized feedback on your interview communication and tech depth. Start practicing for free.
-          </p>
-          <div className="pt-4">
-            <Link
-              to={isAuth ? "/interview" : "/login"}
-              className="inline-flex items-center justify-center bg-white text-black font-bold py-4 px-8 rounded-full transition-all duration-300 hover:scale-105 hover:shadow-[0_0_35px_rgba(255,255,255,0.2)] text-sm cursor-pointer"
-            >
-              Start Free Practice
-            </Link>
+      {/* ============================= CTA ============================ */}
+      <section className="wrap" style={{ paddingTop: 72, paddingBottom: 40 }}>
+        <div className="sky" style={{ borderRadius: 'var(--r-xl)', padding: '72px 40px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+          <Clouds />
+          <div style={{ position: 'relative', zIndex: 2 }}>
+            <h2 style={{ fontSize: 'clamp(32px, 4.4vw, 52px)', color: '#F4F8FB', textShadow: '0 2px 30px rgba(40,60,80,.25)', maxWidth: 720, margin: '0 auto' }}>
+              The interview starts the moment you <em className="serif">speak</em>.
+            </h2>
+            <p style={{ color: 'rgba(245,249,252,.9)', fontSize: 15, maxWidth: 460, margin: '18px auto 32px' }}>
+              Practise out loud, get scored, and fix the gaps — before the real panel.
+            </p>
+            {!loading && (
+              <Link to={startHref} className="btn btn--white btn--lg">
+                {isAuth ? 'Start practising' : 'Start free practice'} →
+              </Link>
+            )}
           </div>
         </div>
       </section>

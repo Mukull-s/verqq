@@ -1,21 +1,35 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import { motion } from "framer-motion";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { getPasswordStrength } from '../utils/passwordStrength';
+
+const Clouds = ({ id }) => (
+  <svg aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 }} viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+    <filter id={id}><feGaussianBlur stdDeviation="36" /></filter>
+    <g filter={`url(#${id})`} fill="#ffffff">
+      <ellipse cx="300" cy="220" rx="360" ry="160" opacity=".7" />
+      <ellipse cx="1200" cy="300" rx="380" ry="150" opacity=".6" />
+      <ellipse cx="700" cy="780" rx="520" ry="200" opacity=".6" />
+      <ellipse cx="200" cy="740" rx="320" ry="150" opacity=".45" />
+    </g>
+  </svg>
+);
+
+const BAR_COLORS = ['var(--rose)', 'var(--rose)', 'var(--amber)', 'var(--green)', 'var(--green)'];
 
 const Register = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const strength = getPasswordStrength(password);
 
-  // Clear error after 5s
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => setError(""), 5000);
+      const timer = setTimeout(() => setError(''), 5000);
       return () => clearTimeout(timer);
     }
   }, [error]);
@@ -23,22 +37,23 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!displayName || !email || !password) {
-      setError("Please fill in all fields");
+      setError('Please fill in all fields');
       return;
     }
-
     if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
+      setError('Password must be at least 8 characters long');
       return;
     }
-
-    setError("");
+    if (strength.isCommon) {
+      setError('That password is too common. Please choose a stronger one.');
+      return;
+    }
+    setError('');
     setLoading(true);
     try {
       await register(displayName, email, password);
-      navigate('/');
+      navigate('/my-interviews');
     } catch (err) {
-      console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Try a different email.');
     } finally {
       setLoading(false);
@@ -46,114 +61,75 @@ const Register = () => {
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#09090B] font-chakra">
-      {/* Premium Cybernetic SVG Grid Backdrop */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <svg className="absolute inset-0 w-full h-full opacity-[0.08]" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" className="text-zinc-700" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-        {/* Glowing Radial Vignette Lights */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full bg-purple-900/10 blur-[100px]" />
-      </div>
-      
-      <div className="absolute inset-0 flex items-center justify-center z-20 px-4 sm:px-6">
-        <motion.div 
-          className="w-full max-w-md border border-zinc-800 bg-[#0C0C0E]/70 p-8 rounded-xl shadow-2xl backdrop-blur-xl relative z-10"
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-white tracking-tight">Create Account</h2>
-            <p className="text-xs text-zinc-400 mt-2">Get started with VerQ today</p>
-          </div>
+    <div className="auth-split" style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '1.05fr .95fr', gap: 16, padding: 16 }}>
+      <aside className="auth-split__aside sky" style={{ borderRadius: 'var(--r-xl)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 40, overflow: 'hidden' }}>
+        <Clouds id="vq-reg-clouds" />
+        <Link className="brand" to="/" style={{ color: '#F4F8FB', zIndex: 3 }}>
+          <span className="brand__mark" style={{ background: 'rgba(255,255,255,.16)', backdropFilter: 'blur(6px)' }}><i></i><i></i><i></i><i></i></span> VerQ
+        </Link>
+        <div style={{ zIndex: 3 }}>
+          <span className="tag tag--glass" style={{ marginBottom: 22 }}>Voice-first mock interviews</span>
+          <h2 style={{ fontSize: 'clamp(34px, 3.6vw, 52px)', color: '#F4F8FB', maxWidth: 460, textShadow: '0 2px 30px rgba(40,60,80,.22)' }}>
+            Say it out loud before it <em className="serif">counts</em>.
+          </h2>
+          <p style={{ color: 'rgba(245,249,252,.86)', maxWidth: 400, marginTop: 18, fontSize: 15 }}>
+            Upload a resume and VerQ sets the level for you. Practise, get scored, and improve fast.
+          </p>
+        </div>
+        <p style={{ color: 'rgba(245,249,252,.7)', fontSize: 13, maxWidth: 360, zIndex: 3 }}>
+          12k+ answers scored · 4.9/5 candidate rating
+        </p>
+      </aside>
+
+      <section style={{ display: 'grid', placeItems: 'center', padding: 40 }}>
+        <div style={{ width: '100%', maxWidth: 392 }}>
+          <h1 style={{ fontSize: 32 }}>Create your account</h1>
+          <p className="lead" style={{ fontSize: 14.5, marginTop: 8 }}>Start with a resume — we’ll set the level for you.</p>
 
           {error && (
-            <motion.div 
-              className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300 text-xs text-center font-medium"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-            >
+            <div style={{ marginTop: 22, padding: '12px 16px', borderRadius: 'var(--r-sm)', background: 'var(--rose-soft)', color: 'var(--rose)', fontSize: 13.5, fontWeight: 600 }}>
               {error}
-            </motion.div>
+            </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your Name"
-                className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-zinc-500 rounded-lg text-white placeholder-zinc-500 transition duration-150 text-sm outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-zinc-500 rounded-lg text-white placeholder-zinc-500 transition duration-150 text-sm outline-none"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-zinc-500 rounded-lg text-white placeholder-zinc-500 transition duration-150 text-sm outline-none"
-                required
-              />
-            </div>
-
-            <motion.button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 px-4 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
-              whileTap={{ scale: 0.98 }}
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4 text-black" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Registering...</span>
+          <form onSubmit={handleSubmit} className="stack" style={{ gap: 16, marginTop: 26 }}>
+            <label className="field">
+              <span>Full name</span>
+              <input className="input" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Mukul Singhal" required autoComplete="name" />
+            </label>
+            <label className="field">
+              <span>Email</span>
+              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" required autoComplete="email" />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required autoComplete="new-password" />
+              {password && (
+                <div style={{ marginTop: 9 }} aria-live="polite">
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[0, 1, 2, 3].map((i) => (
+                      <span key={i} className="meter" style={{ flex: 1, height: 6 }}>
+                        <i style={{ width: '100%', background: i < strength.score ? BAR_COLORS[strength.score] : 'transparent' }} />
+                      </span>
+                    ))}
+                  </div>
+                  <p className="muted" style={{ fontSize: 12, marginTop: 7 }}>
+                    Strength: <b style={{ color: 'var(--ink)' }}>{strength.label}</b>
+                    {strength.isCommon && ' (common password — choose another)'}
+                  </p>
                 </div>
-              ) : (
-                "Register"
               )}
-            </motion.button>
+            </label>
+            <button type="submit" className="btn btn--ink" disabled={loading} style={{ width: '100%' }}>
+              {loading ? 'Creating…' : 'Create account'}
+            </button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-zinc-400">
-            Already have an account?{" "}
-            <Link to="/login" className="text-zinc-200 hover:text-white font-medium underline underline-offset-4 transition duration-150">
-              Login here
-            </Link>
-          </div>
-        </motion.div>
-      </div>
+          <p className="lead" style={{ fontSize: 13.5, marginTop: 24, textAlign: 'center' }}>
+            Already have an account? <Link to="/login" style={{ color: 'var(--accent)', fontWeight: 700 }}>Sign in</Link>
+          </p>
+        </div>
+      </section>
     </div>
   );
 };

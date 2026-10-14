@@ -4,7 +4,7 @@ const User = require('../models/User');
 /**
  * Creates a new interview instance with extracted resume text and structured profile
  */
-const createInterview = async (userId, jobRole, targetCompany, difficulty, resumeText, resumeProfile, interviewGoal, interviewType, roadmap) => {
+const createInterview = async (userId, jobRole, targetCompany, difficulty, resumeText, resumeProfile, interviewGoal, interviewType, roadmap, duration = 30) => {
   try {
     console.log('Creating interview for user:', userId);
     
@@ -19,6 +19,7 @@ const createInterview = async (userId, jobRole, targetCompany, difficulty, resum
       jobRole,
       targetCompany,
       difficulty,
+      duration: Math.min(Math.max(parseInt(duration, 10) || 30, 15), 60),
       resumeText,
       resumeProfile,
       interviewGoal: interviewGoal || 'practice',
@@ -42,9 +43,9 @@ const createInterview = async (userId, jobRole, targetCompany, difficulty, resum
 };
 
 /**
- * Gets all interviews for a user
+ * Gets all interviews for a user (paginated, newest first)
  */
-const getUserInterviews = async (userId) => {
+const getUserInterviews = async (userId, { limit = 50, skip = 0 } = {}) => {
   try {
     console.log('Fetching interviews for user:', userId);
     
@@ -54,8 +55,12 @@ const getUserInterviews = async (userId) => {
       throw new Error('User not found');
     }
     
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+    const safeSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const interviews = await Interview.find({ user: user._id })
       .sort({ createdAt: -1 })
+      .skip(safeSkip)
+      .limit(safeLimit)
       .exec();
     
     console.log(`Found ${interviews.length} interviews for user:`, userId);

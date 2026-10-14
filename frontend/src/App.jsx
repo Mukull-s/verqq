@@ -1,27 +1,26 @@
-import { BrowserRouter as Router, useLocation, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { BrowserRouter as Router, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import LandingPage from './pages/LandingPage';
-// import Dashboard from './pages/Dashboard';
 import MyInterviews from './pages/MyInterviews';
 import Interview from './pages/Interview';
 import InterviewSession from './pages/InterviewSession';
+import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/ProtectedRoute';
 import { NotificationProvider } from './contexts/NotificationContext';
-import './App.css';
 
 // Create a wrapper component to access location
 const AppContent = () => {
   const location = useLocation();
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  const showChrome = !isAuthPage;
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!isAuthPage && <Navbar />}
+      {showChrome && <Navbar />}
       <main className="flex-grow">
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -37,34 +36,30 @@ const AppContent = () => {
               <InterviewSession />
             </ProtectedRoute>
           } />
-          {/* <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } /> */}
+          {/* Legacy /dashboard is dead; redirect to the live dashboard. */}
+          <Route path="/dashboard" element={<Navigate to="/my-interviews" replace />} />
           <Route path="/my-interviews" element={
             <ProtectedRoute>
               <MyInterviews />
             </ProtectedRoute>
           } />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-      <Footer />
+      {showChrome && <Footer />}
     </div>
   );
 };
 
 function App() {
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <AuthProvider>
-          <Router>
-            <AppContent />
-          </Router>
-        </AuthProvider>
-      </NotificationProvider>
-    </ThemeProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </AuthProvider>
+    </NotificationProvider>
   );
 }
 

@@ -38,13 +38,18 @@ const config = {
 };
 
 // Validate required environment variables
+// Primary LLM = Merge Gateway (DeepSeek V4.1 Flash); fallback = OpenRouter/Nemotron.
+// At least one LLM key must be present. STT (Deepgram) is required.
 function validateConfig() {
-  const requiredEnvVars = [
-    'GEMINI_API_KEY',
-    'DEEPGRAM_API_KEY',
-  ];
+  const hasMerge = !!process.env.MERGE_GATEWAY_API_KEY;
+  const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
 
+  const requiredEnvVars = ['DEEPGRAM_API_KEY'];
   const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+
+  if (!hasMerge && !hasOpenRouter) {
+    missingEnvVars.push('MERGE_GATEWAY_API_KEY (or OPENROUTER_API_KEY as fallback)');
+  }
 
   if (missingEnvVars.length > 0) {
     throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);

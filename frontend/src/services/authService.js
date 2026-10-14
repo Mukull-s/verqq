@@ -1,4 +1,11 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { API_BASE_URL } from '../config';
+
+// Security note (VRQ-020): the JWT is stored in localStorage, which is readable
+// by any script on the origin, so an XSS bug could steal it. This is a deliberate
+// SPA tradeoff: moving to httpOnly cookies requires a backend auth rework.
+// Mitigations in place: short 24h token expiry, a strict CSP on both the API
+// (helmet) and the SPA host (vercel.json), and AI output is never rendered as HTML.
+const API_URL = API_BASE_URL;
 
 const logAuthService = (operation, data = {}) => {
   console.log(`[AuthService] ${operation}`, {
