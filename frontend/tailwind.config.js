@@ -7,20 +7,11 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        'sans': ['Inter', 'system-ui', 'sans-serif'],
-        'heading': ['Inter', 'system-ui', 'sans-serif'],
-        'lato': ['Inter', 'system-ui', 'sans-serif'],
-        'montserrat': ['Inter', 'system-ui', 'sans-serif'],
-        'chakra': ['Inter', 'system-ui', 'sans-serif'],
-        'bruno': ['Inter', 'system-ui', 'sans-serif'],
-        'zen': ['Inter', 'system-ui', 'sans-serif'],
-      },
-      colors: {
-        'background': '#09090B',
-        'heading': '#E9EAEA',
-        'paragraph': '#A1A1AA',
+        display: ['"Clash Display"', 'Satoshi', 'system-ui', 'sans-serif'],
+        ui: ['Satoshi', 'system-ui', 'sans-serif'],
+        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
       },
     },
   },
   plugins: [],
-} 
+}
